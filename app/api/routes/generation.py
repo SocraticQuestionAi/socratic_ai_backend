@@ -6,9 +6,11 @@ Workflow 1: PDF/text content -> AI-generated questions
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile, status
 
 from app.api.deps import CurrentUser, OptionalUser, SessionDep
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models import (
     GenerationSession,
     GenerationSource,
@@ -39,6 +41,20 @@ class TextGenerationRequest(BaseModel):
     difficulty: str = Field(default="mixed", description="easy, medium, hard, or mixed")
     topic_focus: str | None = Field(default=None, description="Specific topic to focus on")
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "content": "Photosynthesis is the process by which plants convert light energy into chemical energy. During this process, plants absorb carbon dioxide from the air and water from the soil. Using sunlight, they convert these raw materials into glucose and oxygen. The glucose is used as food by the plant, while oxygen is released as a byproduct. Chlorophyll, the green pigment in leaves, plays a crucial role in capturing light energy.",
+                    "num_questions": 3,
+                    "question_types": ["mcq", "open_ended"],
+                    "difficulty": "medium",
+                    "topic_focus": "Photosynthesis basics"
+                }
+            ]
+        }
+    }
+
 
 class GenerationResponse(BaseModel):
     """Response schema for question generation."""
@@ -49,10 +65,58 @@ class GenerationResponse(BaseModel):
     source_type: str
     page_count: int | None = None
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "questions": [
+                        {
+                            "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+                            "question_text": "What is the primary function of chlorophyll in photosynthesis?",
+                            "question_type": "mcq",
+                            "difficulty": "medium",
+                            "topic": "Photosynthesis",
+                            "explanation": "Chlorophyll is the green pigment in plant cells that captures light energy from the sun. This energy is essential for converting carbon dioxide and water into glucose during photosynthesis.",
+                            "correct_answer": "B",
+                            "options": [
+                                {"label": "A", "text": "To absorb water from the soil", "is_correct": False},
+                                {"label": "B", "text": "To capture light energy from the sun", "is_correct": True},
+                                {"label": "C", "text": "To release oxygen into the air", "is_correct": False},
+                                {"label": "D", "text": "To store glucose in the leaves", "is_correct": False}
+                            ],
+                            "confidence_score": 0.92,
+                            "created_at": "2024-01-15T10:30:00Z",
+                            "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                        },
+                        {
+                            "id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+                            "question_text": "Explain the process of photosynthesis in your own words, including the inputs and outputs.",
+                            "question_type": "open_ended",
+                            "difficulty": "medium",
+                            "topic": "Photosynthesis",
+                            "explanation": "A complete answer should mention: (1) Inputs: carbon dioxide, water, and sunlight; (2) Process: plants use chlorophyll to capture light energy; (3) Outputs: glucose (food for plant) and oxygen (released into air).",
+                            "correct_answer": "Photosynthesis is the process where plants use sunlight, water from roots, and CO2 from air to make glucose and oxygen.",
+                            "options": None,
+                            "confidence_score": 0.88,
+                            "created_at": "2024-01-15T10:30:01Z",
+                            "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                        }
+                    ],
+                    "generation_summary": "Generated 2 questions (1 MCQ, 1 open-ended) on Photosynthesis at medium difficulty",
+                    "source_type": "text",
+                    "page_count": None
+                }
+            ]
+        }
+    }
+
 
 @router.post("/from-text", response_model=GenerationResponse)
+@limiter.limit(settings.RATE_LIMIT_GENERATION)
 async def generate_from_text(
-    request: TextGenerationRequest,
+    request: Request,
+    body: TextGenerationRequest,
     session: SessionDep,
     current_user: OptionalUser,
 ) -> GenerationResponse:
@@ -67,27 +131,27 @@ async def generate_from_text(
 
     # Parse question types
     q_types = None
-    if request.question_types:
+    if body.question_types:
         q_types = [
             QuestionType.MCQ if t.lower() == "mcq" else QuestionType.OPEN_ENDED
-            for t in request.question_types
+            for t in body.question_types
         ]
 
     # Generate questions
     result: GeneratedQuestions = generator.generate_from_document(
-        content=request.content,
-        num_questions=request.num_questions,
+        content=body.content,
+        num_questions=body.num_questions,
         question_types=q_types,
-        difficulty=request.difficulty,
-        topic_focus=request.topic_focus,
+        difficulty=body.difficulty,
+        topic_focus=body.topic_focus,
     )
 
     # Create session and questions in database
     gen_session = GenerationSession(
         source_type=GenerationSource.TEXT,
-        source_content=request.content[:1000],  # Store preview
-        num_questions_requested=request.num_questions,
-        owner_id=current_user.id if current_user else None,
+        source_content=body.content[:1000],  # Store preview
+        num_questions_requested=body.num_questions,
+        user_id=current_user.id if current_user else None,
     )
     session.add(gen_session)
     session.flush()
@@ -126,7 +190,9 @@ async def generate_from_text(
 
 
 @router.post("/from-pdf", response_model=GenerationResponse)
+@limiter.limit(settings.RATE_LIMIT_GENERATION)
 async def generate_from_pdf(
+    request: Request,
     file: Annotated[UploadFile, File(description="PDF file to process")],
     session: SessionDep,
     current_user: OptionalUser,
@@ -189,7 +255,7 @@ async def generate_from_pdf(
         source_type=GenerationSource.PDF,
         source_content=f"PDF: {file.filename}",
         num_questions_requested=num_questions,
-        owner_id=current_user.id if current_user else None,
+        user_id=current_user.id if current_user else None,
     )
     session.add(gen_session)
     session.flush()
@@ -240,7 +306,7 @@ async def get_generation_session(
         raise HTTPException(status_code=404, detail="Generation session not found")
 
     # Check ownership if session has owner
-    if gen_session.owner_id and (not current_user or gen_session.owner_id != current_user.id):
+    if gen_session.user_id and (not current_user or gen_session.user_id != current_user.id):
         raise HTTPException(status_code=403, detail="Not authorized to access this session")
 
     return GenerationResponse(

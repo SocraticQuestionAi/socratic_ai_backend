@@ -24,13 +24,8 @@ dependencies = [
     "pydantic-settings>=2.5.0",
     "email-validator>=2.2.0",
 
-    # AI & LLM
-    "langchain>=0.3.0",
-    "langchain-core>=0.3.0",
-    "langchain-openai>=0.2.0",
-    "langchain-google-genai>=2.0.0",
+    # AI & LLM (using OpenRouter - OpenAI-compatible API for all models)
     "openai>=1.50.0",
-    "google-generativeai>=0.8.0",
     "instructor>=1.4.0",
 
     # PDF Processing
@@ -44,6 +39,9 @@ dependencies = [
     "httpx>=0.27.0",
     "tenacity>=9.0.0",
     "python-dotenv>=1.0.1",
+
+    # Rate Limiting & Security
+    "slowapi>=0.1.9",
 
     # Monitoring
     "sentry-sdk[fastapi]>=2.14.0",
@@ -62,6 +60,9 @@ dev-dependencies = [
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["app"]
 
 [tool.mypy]
 strict = true

@@ -6,7 +6,7 @@ Uses SQLModel for unified ORM and validation.
 import uuid
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import EmailStr
 from sqlmodel import JSON, Column, Field, Relationship, SQLModel
@@ -28,6 +28,12 @@ class SessionStatus(str, Enum):
     ARCHIVED = "archived"
 
 
+class GenerationSource(str, Enum):
+    PDF = "pdf"
+    TEXT = "text"
+    SIMILARITY = "similarity"
+
+
 # =============================================================================
 # User Models
 # =============================================================================
@@ -42,6 +48,20 @@ class UserBase(SQLModel):
 
 class UserCreate(UserBase):
     password: str = Field(min_length=8, max_length=128)
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "email": "student@university.edu",
+                    "password": "securePassword123!",
+                    "full_name": "John Student",
+                    "is_active": True,
+                    "is_superuser": False
+                }
+            ]
+        }
+    }
 
 
 class UserUpdate(SQLModel):
@@ -63,6 +83,20 @@ class User(UserBase, table=True):
 
 class UserPublic(UserBase):
     id: uuid.UUID
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "email": "student@university.edu",
+                    "full_name": "John Student",
+                    "is_active": True,
+                    "is_superuser": False
+                }
+            ]
+        }
+    }
 
 
 # =============================================================================
@@ -88,7 +122,7 @@ class QuestionBase(SQLModel):
     explanation: str = Field(description="Detailed solution/explanation")
 
     # MCQ specific (nullable for open-ended)
-    options: list[MCQOption] | None = Field(
+    options: list[dict] | None = Field(
         default=None,
         sa_column=Column(JSON),
         description="MCQ options (null for open-ended)"
@@ -118,9 +152,12 @@ class Question(QuestionBase, table=True):
     session_id: uuid.UUID | None = Field(
         default=None, foreign_key="generationsession.id", ondelete="CASCADE"
     )
+    owner_id: uuid.UUID | None = Field(
+        default=None, foreign_key="user.id", ondelete="SET NULL"
+    )
 
     # Relationships
-    session: "GenerationSession | None" = Relationship(back_populates="questions")
+    session: Optional["GenerationSession"] = Relationship(back_populates="questions")
     refinement_history: list["RefinementEntry"] = Relationship(
         back_populates="question", cascade_delete=True
     )
@@ -139,12 +176,51 @@ class QuestionPublic(QuestionBase):
     created_at: datetime
     session_id: uuid.UUID | None = None
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+                    "question_text": "What is the primary function of chlorophyll in photosynthesis?",
+                    "question_type": "mcq",
+                    "difficulty": "medium",
+                    "topic": "Biology - Photosynthesis",
+                    "explanation": "Chlorophyll is the green pigment in plant cells that captures light energy from the sun. This energy is essential for converting carbon dioxide and water into glucose during photosynthesis.",
+                    "correct_answer": "B",
+                    "options": [
+                        {"label": "A", "text": "To absorb water from the soil", "is_correct": False},
+                        {"label": "B", "text": "To capture light energy from the sun", "is_correct": True},
+                        {"label": "C", "text": "To release oxygen into the air", "is_correct": False},
+                        {"label": "D", "text": "To store glucose in the leaves", "is_correct": False}
+                    ],
+                    "source_context": "Photosynthesis chapter excerpt...",
+                    "confidence_score": 0.92,
+                    "created_at": "2024-01-15T10:30:00Z",
+                    "session_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+                }
+            ]
+        }
+    }
+
 
 class QuestionsPublic(SQLModel):
     """Paginated list of questions."""
 
     data: list[QuestionPublic]
     count: int
+
+
+class QuestionUpdate(SQLModel):
+    """Schema for updating a question."""
+
+    question_text: str | None = None
+    question_type: QuestionType | None = None
+    difficulty: str | None = None
+    topic: str | None = None
+    explanation: str | None = None
+    correct_answer: str | None = None
+    options: list[dict] | None = None
+    confidence_score: float | None = None
 
 
 # =============================================================================
@@ -156,9 +232,10 @@ class GenerationSessionBase(SQLModel):
     """A session for generating questions (groups related questions)."""
 
     title: str | None = Field(default=None, max_length=255)
-    source_type: str = Field(description="pdf, text, image, similarity")
+    source_type: GenerationSource = Field(description="pdf, text, image, similarity")
     source_content: str | None = Field(default=None, description="Original input text/context")
     status: SessionStatus = Field(default=SessionStatus.ACTIVE)
+    num_questions_requested: int | None = Field(default=None, description="Number of questions requested")
 
 
 class GenerationSession(GenerationSessionBase, table=True):
@@ -166,11 +243,11 @@ class GenerationSession(GenerationSessionBase, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
-    # Foreign keys
-    user_id: uuid.UUID = Field(foreign_key="user.id", ondelete="CASCADE")
+    # Foreign keys (optional for anonymous users)
+    user_id: uuid.UUID | None = Field(default=None, foreign_key="user.id", ondelete="SET NULL")
 
     # Relationships
-    user: User = Relationship(back_populates="sessions")
+    user: Optional[User] = Relationship(back_populates="sessions")
     questions: list[Question] = Relationship(
         back_populates="session", cascade_delete=True
     )
@@ -185,7 +262,7 @@ class GenerationSessionCreate(SQLModel):
 class GenerationSessionPublic(GenerationSessionBase):
     id: uuid.UUID
     created_at: datetime
-    user_id: uuid.UUID
+    user_id: uuid.UUID | None = None
 
 
 class GenerationSessionWithQuestions(GenerationSessionPublic):
@@ -206,9 +283,17 @@ class RefinementEntry(SQLModel, table=True):
     # The refinement instruction
     instruction: str = Field(description="User's refinement instruction")
 
+    # Summary of changes made
+    changes_made: str = Field(default="", description="Summary of changes applied")
+
     # Snapshot before refinement
     previous_state: dict[str, Any] = Field(
         sa_column=Column(JSON), description="Question state before refinement"
+    )
+
+    # Snapshot after refinement
+    new_state: dict[str, Any] | None = Field(
+        default=None, sa_column=Column(JSON), description="Question state after refinement"
     )
 
     # Foreign keys
@@ -222,12 +307,7 @@ class RefinementRequest(SQLModel):
     """Request to refine a question."""
 
     instruction: str = Field(
-        description="Natural language instruction for refinement",
-        examples=[
-            "Change the correct answer to B",
-            "Make the distractors more confusing",
-            "Change the numbers to create an integer result",
-        ],
+        description="Natural language instruction for refinement (e.g., 'Change the correct answer to B', 'Make the distractors more confusing')",
     )
 
 
@@ -246,6 +326,17 @@ class RefinementResponse(SQLModel):
 class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "access_token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhMWIyYzNkNC1lNWY2LTc4OTAtYWJjZC1lZjEyMzQ1Njc4OTAiLCJleHAiOjE3MDUzMTQ4MDB9.example_signature",
+                    "token_type": "bearer"
+                }
+            ]
+        }
+    }
 
 
 class TokenPayload(SQLModel):

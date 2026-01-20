@@ -1,6 +1,7 @@
 """
 API Dependencies - Dependency injection for FastAPI routes.
 """
+import uuid as uuid_module
 from collections.abc import Generator
 from typing import Annotated
 
@@ -18,6 +19,12 @@ from app.models import TokenPayload, User
 
 reusable_oauth2 = OAuth2PasswordBearer(
     tokenUrl=f"{settings.API_V1_STR}/auth/login"
+)
+
+# Optional OAuth2 - doesn't raise error when token is missing
+optional_oauth2 = OAuth2PasswordBearer(
+    tokenUrl=f"{settings.API_V1_STR}/auth/login",
+    auto_error=False
 )
 
 
@@ -41,7 +48,14 @@ def get_current_user(session: SessionDep, token: TokenDep) -> User:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Could not validate credentials",
         )
-    user = session.get(User, token_data.sub)
+    try:
+        user_id = uuid_module.UUID(token_data.sub)
+    except (ValueError, AttributeError):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Could not validate credentials",
+        )
+    user = session.get(User, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     if not user.is_active:
@@ -62,7 +76,7 @@ def get_current_active_superuser(current_user: CurrentUser) -> User:
 
 # Optional auth - returns None if not authenticated
 def get_optional_user(
-    session: SessionDep, token: str | None = Depends(reusable_oauth2)
+    session: SessionDep, token: str | None = Depends(optional_oauth2)
 ) -> User | None:
     if not token:
         return None

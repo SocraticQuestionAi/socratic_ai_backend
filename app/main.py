@@ -8,13 +8,18 @@ AI-powered educational question generation with three core workflows:
 """
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 from sqlmodel import SQLModel
 
 from app.api.main import api_router
 from app.core.config import settings
 from app.core.db import engine
+from app.core.middleware import SecurityHeadersMiddleware, TrustedHostMiddleware
+from app.core.rate_limit import limiter
 
 
 @asynccontextmanager
@@ -62,14 +67,35 @@ Most endpoints work without authentication for quick testing.
     lifespan=lifespan,
 )
 
-# CORS configuration
+# =============================================================================
+# Middleware Stack (order matters - last added runs first)
+# =============================================================================
+
+# 1. Security Headers (runs on every response)
+app.add_middleware(SecurityHeadersMiddleware)
+
+# 2. Trusted Host validation
+if settings.ALLOWED_HOSTS != ["*"]:
+    app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.ALLOWED_HOSTS)
+
+# 3. CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.BACKEND_CORS_ORIGINS,
+    allow_origins=settings.all_cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# =============================================================================
+# Rate Limiting Setup
+# =============================================================================
+
+# Attach limiter to app state for access in routes
+app.state.limiter = limiter
+
+# Register rate limit exceeded handler
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Include API router
 app.include_router(api_router, prefix=settings.API_V1_STR)

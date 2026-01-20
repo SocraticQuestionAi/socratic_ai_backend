@@ -1,8 +1,13 @@
-from sqlmodel import Session, create_engine, select
+from sqlmodel import Session, SQLModel, create_engine, select
 
 from app.core.config import settings
 
-engine = create_engine(str(settings.SQLALCHEMY_DATABASE_URI))
+# SQLite needs special handling for FastAPI's async nature
+connect_args = {}
+if settings.SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
+    connect_args["check_same_thread"] = False
+
+engine = create_engine(settings.SQLALCHEMY_DATABASE_URI, connect_args=connect_args)
 
 
 def get_session():

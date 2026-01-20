@@ -34,6 +34,27 @@ class QuestionState(BaseModel):
     correct_answer: str = ""
     options: list[dict] | None = None
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "question_text": "What is the capital of France?",
+                    "question_type": "mcq",
+                    "difficulty": "easy",
+                    "topic": "Geography",
+                    "explanation": "Paris has been the capital of France since the 10th century.",
+                    "correct_answer": "A",
+                    "options": [
+                        {"label": "A", "text": "Paris", "is_correct": True},
+                        {"label": "B", "text": "London", "is_correct": False},
+                        {"label": "C", "text": "Berlin", "is_correct": False},
+                        {"label": "D", "text": "Madrid", "is_correct": False}
+                    ]
+                }
+            ]
+        }
+    }
+
 
 class RefinementRequest(BaseModel):
     """Request schema for question refinement."""
@@ -51,6 +72,38 @@ class RefinementRequest(BaseModel):
         default=None, description="Continue existing refinement conversation"
     )
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "question_state": {
+                        "question_text": "What is the capital of France?",
+                        "question_type": "mcq",
+                        "difficulty": "easy",
+                        "topic": "Geography",
+                        "explanation": "Paris has been the capital of France since the 10th century.",
+                        "correct_answer": "A",
+                        "options": [
+                            {"label": "A", "text": "Paris", "is_correct": True},
+                            {"label": "B", "text": "London", "is_correct": False},
+                            {"label": "C", "text": "Berlin", "is_correct": False},
+                            {"label": "D", "text": "Madrid", "is_correct": False}
+                        ]
+                    },
+                    "instruction": "Make the distractors more challenging by using other European capitals"
+                },
+                {
+                    "question_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "instruction": "Change the correct answer to B and update the options accordingly"
+                },
+                {
+                    "conversation_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+                    "instruction": "Now make the question harder by asking about population instead"
+                }
+            ]
+        }
+    }
+
 
 class RefinementResponse(BaseModel):
     """Response schema for refinement."""
@@ -61,6 +114,37 @@ class RefinementResponse(BaseModel):
     confidence_score: float
     turn_number: int
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "conversation_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+                    "refined_question": {
+                        "id": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
+                        "question_text": "What is the capital of France?",
+                        "question_type": "mcq",
+                        "difficulty": "medium",
+                        "topic": "Geography",
+                        "explanation": "Paris has been the capital of France since the late 10th century, serving as the political, economic, and cultural center of the nation.",
+                        "correct_answer": "A",
+                        "options": [
+                            {"label": "A", "text": "Paris", "is_correct": True},
+                            {"label": "B", "text": "Vienna", "is_correct": False},
+                            {"label": "C", "text": "Brussels", "is_correct": False},
+                            {"label": "D", "text": "Amsterdam", "is_correct": False}
+                        ],
+                        "confidence_score": 0.94,
+                        "created_at": "2024-01-15T12:00:00Z",
+                        "session_id": None
+                    },
+                    "changes_made": "Updated distractors to use other European capitals (Vienna, Brussels, Amsterdam) to increase difficulty. Changed difficulty from 'easy' to 'medium'.",
+                    "confidence_score": 0.94,
+                    "turn_number": 1
+                }
+            ]
+        }
+    }
+
 
 class ConversationHistory(BaseModel):
     """Refinement conversation history."""
@@ -69,6 +153,37 @@ class ConversationHistory(BaseModel):
     question_id: uuid.UUID
     turns: list[dict]
     current_state: QuestionState
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "conversation_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+                    "question_id": "d4e5f6a7-b8c9-0123-def4-567890abcdef",
+                    "turns": [
+                        {"role": "user", "content": "Make the distractors more challenging"},
+                        {"role": "assistant", "content": "Changes: Updated distractors to use European capitals"},
+                        {"role": "user", "content": "Now increase the difficulty to hard"},
+                        {"role": "assistant", "content": "Changes: Changed difficulty to hard and made question more complex"}
+                    ],
+                    "current_state": {
+                        "question_text": "What is the capital city of France and approximately when did it become the official capital?",
+                        "question_type": "mcq",
+                        "difficulty": "hard",
+                        "topic": "Geography",
+                        "explanation": "Paris became the capital in 987 when Hugh Capet chose it as the seat of his dynasty.",
+                        "correct_answer": "B",
+                        "options": [
+                            {"label": "A", "text": "Paris, 12th century", "is_correct": False},
+                            {"label": "B", "text": "Paris, 10th century", "is_correct": True},
+                            {"label": "C", "text": "Lyon, 10th century", "is_correct": False},
+                            {"label": "D", "text": "Marseille, 11th century", "is_correct": False}
+                        ]
+                    }
+                }
+            ]
+        }
+    }
 
 
 # In-memory conversation store (for demo; use Redis/DB in production)

@@ -6,12 +6,13 @@ JWT-based authentication for API access.
 from datetime import timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordRequestForm
 
 from app.api.deps import CurrentUser, SessionDep
 from app.core import security
 from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.crud import authenticate_user, create_user, get_user_by_email
 from app.models import Token, UserCreate, UserPublic
 
@@ -19,7 +20,9 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=Token)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 async def login(
+    request: Request,
     session: SessionDep,
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()],
 ) -> Token:
@@ -55,7 +58,9 @@ async def login(
 
 
 @router.post("/register", response_model=UserPublic)
+@limiter.limit(settings.RATE_LIMIT_AUTH)
 async def register(
+    request: Request,
     session: SessionDep,
     user_in: UserCreate,
 ) -> UserPublic:

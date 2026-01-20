@@ -61,6 +61,10 @@ def authenticate(*, session: Session, email: str, password: str) -> User | None:
     return db_user
 
 
+# Alias for compatibility
+authenticate_user = authenticate
+
+
 # =============================================================================
 # Generation Session CRUD
 # =============================================================================

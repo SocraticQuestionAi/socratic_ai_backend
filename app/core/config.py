@@ -47,23 +47,32 @@ class Settings(BaseSettings):
         return [str(origin).rstrip("/") for origin in self.BACKEND_CORS_ORIGINS]
 
     # Database
+    DATABASE_URL: str | None = None  # Override entire connection string (supports SQLite)
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432
     POSTGRES_USER: str = "postgres"
     POSTGRES_PASSWORD: str = ""
     POSTGRES_DB: str = "socratic_ai"
+    USE_SQLITE: bool = False  # Auto-enabled in local mode if PostgreSQL unavailable
 
     @computed_field
     @property
-    def SQLALCHEMY_DATABASE_URI(self) -> PostgresDsn:
-        return PostgresDsn.build(
+    def SQLALCHEMY_DATABASE_URI(self) -> str:
+        # Allow full override via DATABASE_URL
+        if self.DATABASE_URL:
+            return self.DATABASE_URL
+        # Use SQLite for local development if explicitly requested
+        if self.USE_SQLITE or (self.ENVIRONMENT == "local" and not self.POSTGRES_PASSWORD):
+            return "sqlite:///./socratic_ai.db"
+        # Default to PostgreSQL
+        return str(PostgresDsn.build(
             scheme="postgresql+psycopg",
             username=self.POSTGRES_USER,
             password=self.POSTGRES_PASSWORD,
             host=self.POSTGRES_SERVER,
             port=self.POSTGRES_PORT,
             path=self.POSTGRES_DB,
-        )
+        ))
 
     # AI Providers
     OPENROUTER_API_KEY: str = ""
@@ -81,6 +90,16 @@ class Settings(BaseSettings):
 
     # Sentry
     SENTRY_DSN: HttpUrl | None = None
+
+    # Rate Limiting
+    RATE_LIMIT_ENABLED: bool = True
+    RATE_LIMIT_STORAGE_URI: str = "memory://"  # Use Redis URI in production
+    RATE_LIMIT_DEFAULT: str = "100/minute"  # General API limit
+    RATE_LIMIT_AUTH: str = "5/minute"  # Auth endpoints (login, register)
+    RATE_LIMIT_GENERATION: str = "20/minute"  # LLM generation endpoints
+
+    # Security
+    ALLOWED_HOSTS: list[str] = ["*"]  # Restrict in production
 
     # Email (optional)
     SMTP_TLS: bool = True
