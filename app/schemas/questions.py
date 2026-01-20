@@ -58,9 +58,13 @@ class GeneratedQuestions(BaseModel):
     )
 
 
-class QuestionAnalysis(BaseModel):
-    """Schema for analyzing an input question (for similarity generation)."""
+class SimilarityAnalysis(BaseModel):
+    """Schema for analyzing a question before generating similar ones.
 
+    Flattened structure for better LLM compatibility across different providers.
+    """
+
+    # Question analysis fields (flattened from QuestionAnalysis)
     topic: str = Field(description="The main topic/subject of the question")
     subtopic: str = Field(description="More specific subtopic if applicable")
     difficulty: str = Field(description="Estimated difficulty: easy, medium, hard")
@@ -76,11 +80,7 @@ class QuestionAnalysis(BaseModel):
         description="Description of the question format/style"
     )
 
-
-class SimilarityAnalysis(BaseModel):
-    """Schema for analyzing a question before generating similar ones."""
-
-    analysis: QuestionAnalysis = Field(description="Analysis of the input question")
+    # Variation suggestions
     variation_suggestions: list[str] = Field(
         description="Suggestions for how to create variations"
     )

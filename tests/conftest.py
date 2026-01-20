@@ -35,7 +35,6 @@ from app.schemas.questions import (
     GeneratedQuestion,
     GeneratedQuestions,
     MCQOptionSchema,
-    QuestionAnalysis,
     RefinedQuestion,
     SimilarityAnalysis,
 )
@@ -310,15 +309,13 @@ def mock_generated_questions_fixture() -> GeneratedQuestions:
 def mock_similarity_analysis_fixture() -> SimilarityAnalysis:
     """Mock response for similarity analysis."""
     return SimilarityAnalysis(
-        analysis=QuestionAnalysis(
-            topic="Mathematics",
-            subtopic="Arithmetic - Multiplication",
-            difficulty="easy",
-            question_type="mcq",
-            key_concepts=["multiplication", "unit price", "total cost"],
-            mathematical_operations=["multiplication"],
-            format_style="word_problem",
-        ),
+        topic="Mathematics",
+        subtopic="Arithmetic - Multiplication",
+        difficulty="easy",
+        question_type="mcq",
+        key_concepts=["multiplication", "unit price", "total cost"],
+        mathematical_operations=["multiplication"],
+        format_style="word_problem",
         variation_suggestions=[
             "Change the items being purchased",
             "Vary the unit price",

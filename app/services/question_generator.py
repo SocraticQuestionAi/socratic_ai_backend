@@ -269,11 +269,11 @@ Provide a comprehensive analysis for generating similar questions."""
 {original_question}{options_text}
 
 === ANALYSIS ===
-Topic: {analysis.analysis.topic}
-Subtopic: {analysis.analysis.subtopic}
-Difficulty: {analysis.analysis.difficulty}
-Key Concepts: {', '.join(analysis.analysis.key_concepts)}
-Format Style: {analysis.analysis.format_style}
+Topic: {analysis.topic}
+Subtopic: {analysis.subtopic}
+Difficulty: {analysis.difficulty}
+Key Concepts: {', '.join(analysis.key_concepts)}
+Format Style: {analysis.format_style}
 Variation Suggestions: {', '.join(analysis.variation_suggestions)}
 
 Generate {num_questions} new questions that are logically similar but with different values/contexts.

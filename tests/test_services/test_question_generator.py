@@ -12,7 +12,6 @@ from app.schemas.questions import (
     GeneratedQuestion,
     GeneratedQuestions,
     MCQOptionSchema,
-    QuestionAnalysis,
     RefinedQuestion,
     SimilarityAnalysis,
 )
@@ -171,7 +170,7 @@ class TestAnalyzeQuestion:
         )
 
         assert isinstance(result, SimilarityAnalysis)
-        assert result.analysis is not None
+        assert result.topic is not None
         assert result.variation_suggestions is not None
 
     def test_analyze_question_with_options(

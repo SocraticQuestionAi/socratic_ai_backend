@@ -160,13 +160,13 @@ async def analyze_question(
     )
 
     return AnalysisResponse(
-        topic=analysis.analysis.topic,
-        subtopic=analysis.analysis.subtopic,
-        difficulty=analysis.analysis.difficulty,
-        question_type=analysis.analysis.question_type,
-        key_concepts=analysis.analysis.key_concepts,
-        mathematical_operations=analysis.analysis.mathematical_operations,
-        format_style=analysis.analysis.format_style,
+        topic=analysis.topic,
+        subtopic=analysis.subtopic,
+        difficulty=analysis.difficulty,
+        question_type=analysis.question_type,
+        key_concepts=analysis.key_concepts,
+        mathematical_operations=analysis.mathematical_operations,
+        format_style=analysis.format_style,
         variation_suggestions=analysis.variation_suggestions,
     )
 
@@ -242,13 +242,13 @@ async def generate_similar_questions(
     return SimilarityResponse(
         session_id=gen_session.id,
         original_analysis=AnalysisResponse(
-            topic=analysis.analysis.topic,
-            subtopic=analysis.analysis.subtopic,
-            difficulty=analysis.analysis.difficulty,
-            question_type=analysis.analysis.question_type,
-            key_concepts=analysis.analysis.key_concepts,
-            mathematical_operations=analysis.analysis.mathematical_operations,
-            format_style=analysis.analysis.format_style,
+            topic=analysis.topic,
+            subtopic=analysis.subtopic,
+            difficulty=analysis.difficulty,
+            question_type=analysis.question_type,
+            key_concepts=analysis.key_concepts,
+            mathematical_operations=analysis.mathematical_operations,
+            format_style=analysis.format_style,
             variation_suggestions=analysis.variation_suggestions,
         ),
         similar_questions=[QuestionPublic.model_validate(q) for q in questions],
