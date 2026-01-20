@@ -187,6 +187,38 @@ class TestGenerateFromPDF:
             assert result["source_type"] == "pdf"
             assert result["page_count"] == 3
 
+    def test_generate_from_pdf_with_question_types(
+        self,
+        client: TestClient,
+        mock_generated_questions: GeneratedQuestions,
+        sample_pdf_content: bytes,
+    ):
+        """Test PDF generation with specific question types."""
+        with patch(
+            "app.api.routes.generation.get_question_generator"
+        ) as mock_get_generator, patch(
+            "app.api.routes.generation.extract_text_from_pdf"
+        ) as mock_extract, patch(
+            "app.api.routes.generation.get_pdf_info"
+        ) as mock_info:
+            mock_generator = MagicMock()
+            mock_generator.generate_from_document.return_value = mock_generated_questions
+            mock_get_generator.return_value = mock_generator
+
+            mock_extract.return_value = "Extracted PDF content about photosynthesis and chlorophyll."
+            mock_info.return_value = {"page_count": 2, "is_encrypted": False}
+
+            files = {"file": ("test.pdf", io.BytesIO(sample_pdf_content), "application/pdf")}
+            data = {"num_questions": 3, "question_types": "mcq,open_ended"}
+
+            response = client.post(
+                "/api/v1/generate/from-pdf",
+                files=files,
+                data=data,
+            )
+
+            assert response.status_code == 200
+
     def test_generate_from_pdf_wrong_file_type(self, client: TestClient):
         """Test that non-PDF files are rejected."""
         files = {"file": ("test.txt", io.BytesIO(b"Not a PDF"), "text/plain")}

@@ -181,3 +181,111 @@ class TestTestToken:
         )
 
         assert response.status_code == 403
+
+
+class TestAuthEdgeCases:
+    """Tests for authentication edge cases and error handling."""
+
+    def test_token_with_invalid_uuid_subject(self, client: TestClient):
+        """Test token with non-UUID subject returns 403."""
+        import jwt
+        from app.core.config import settings
+        from app.core.security import ALGORITHM
+
+        # Create a token with invalid UUID as subject
+        token = jwt.encode(
+            {"sub": "not-a-valid-uuid", "exp": 9999999999},
+            settings.SECRET_KEY,
+            algorithm=ALGORITHM,
+        )
+
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 403
+        assert "Could not validate credentials" in response.json()["detail"]
+
+    def test_token_with_nonexistent_user_id(self, client: TestClient):
+        """Test token with valid UUID but nonexistent user returns 404."""
+        import uuid
+        import jwt
+        from app.core.config import settings
+        from app.core.security import ALGORITHM
+
+        # Create a token with a valid UUID that doesn't exist in DB
+        fake_user_id = str(uuid.uuid4())
+        token = jwt.encode(
+            {"sub": fake_user_id, "exp": 9999999999},
+            settings.SECRET_KEY,
+            algorithm=ALGORITHM,
+        )
+
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 404
+        assert "User not found" in response.json()["detail"]
+
+    def test_token_for_inactive_user(self, client: TestClient, inactive_user: User):
+        """Test that accessing protected route with inactive user token returns 400."""
+        from datetime import timedelta
+        from app.core.security import create_access_token
+
+        token = create_access_token(
+            subject=str(inactive_user.id),
+            expires_delta=timedelta(minutes=30),
+        )
+
+        response = client.get(
+            "/api/v1/auth/me",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+
+        assert response.status_code == 400
+        assert "Inactive user" in response.json()["detail"]
+
+    def test_optional_auth_with_invalid_token(
+        self, client: TestClient, sample_text_content: str
+    ):
+        """Test optional auth endpoint with invalid token doesn't fail."""
+        from unittest.mock import patch, MagicMock
+
+        with patch(
+            "app.api.routes.generation.get_question_generator"
+        ) as mock_get_generator:
+            from app.schemas.questions import GeneratedQuestions, GeneratedQuestion, MCQOptionSchema
+
+            mock_generator = MagicMock()
+            mock_generator.generate_from_document.return_value = GeneratedQuestions(
+                questions=[
+                    GeneratedQuestion(
+                        question_text="Test question?",
+                        question_type="mcq",
+                        difficulty="easy",
+                        topic="Test",
+                        explanation="Test explanation",
+                        options=[
+                            MCQOptionSchema(label="A", text="Answer A", is_correct=True),
+                            MCQOptionSchema(label="B", text="Answer B", is_correct=False),
+                        ],
+                        correct_answer="A",
+                        confidence_score=0.9,
+                    ),
+                ],
+                generation_summary="Generated 1 question",
+            )
+            mock_get_generator.return_value = mock_generator
+
+            # Should still work with invalid token (optional auth)
+            response = client.post(
+                "/api/v1/generate/from-text",
+                json={"content": sample_text_content, "num_questions": 1},
+                headers={"Authorization": "Bearer invalid-token"},
+            )
+
+            # Optional auth should allow the request
+            assert response.status_code == 200

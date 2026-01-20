@@ -19,7 +19,7 @@ from pydantic import BaseModel
 from sqlmodel import Session, SQLModel, create_engine
 from sqlmodel.pool import StaticPool
 
-from app.api.deps import get_db, get_current_user
+from app.api.deps import get_db, get_current_user, get_optional_user
 from app.core.security import create_access_token, get_password_hash
 from app.main import app
 from app.models import (
@@ -174,8 +174,12 @@ def authenticated_client_fixture(
     def get_current_user_override():
         return test_user
 
+    def get_optional_user_override():
+        return test_user
+
     app.dependency_overrides[get_db] = get_session_override
     app.dependency_overrides[get_current_user] = get_current_user_override
+    app.dependency_overrides[get_optional_user] = get_optional_user_override
 
     with TestClient(app) as client:
         yield client

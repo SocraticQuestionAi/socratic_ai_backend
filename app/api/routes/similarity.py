@@ -257,7 +257,9 @@ async def generate_similar_questions(
 
 
 @router.post("/batch", response_model=list[SimilarityResponse])
+@limiter.limit(settings.RATE_LIMIT_GENERATION)
 async def generate_similar_batch(
+    request: Request,
     questions: list[SimilarityRequest],
     session: SessionDep,
     current_user: OptionalUser,
@@ -278,7 +280,8 @@ async def generate_similar_batch(
     for req in questions:
         # Reuse the single generation endpoint logic
         response = await generate_similar_questions(
-            request=req,
+            request=request,
+            body=req,
             session=session,
             current_user=current_user,
         )

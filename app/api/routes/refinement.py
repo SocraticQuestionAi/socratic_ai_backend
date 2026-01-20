@@ -7,10 +7,12 @@ Supports multi-turn conversation for iterative refinement.
 import uuid
 from datetime import datetime
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field
 
 from app.api.deps import CurrentUser, OptionalUser, SessionDep
+from app.core.config import settings
+from app.core.rate_limit import limiter
 from app.models import (
     Question,
     QuestionPublic,
@@ -191,8 +193,10 @@ _conversations: dict[uuid.UUID, dict] = {}
 
 
 @router.post("/refine", response_model=RefinementResponse)
+@limiter.limit(settings.RATE_LIMIT_GENERATION)
 async def refine_question(
-    request: RefinementRequest,
+    request: Request,
+    body: RefinementRequest,
     session: SessionDep,
     current_user: OptionalUser,
 ) -> RefinementResponse:
@@ -214,9 +218,23 @@ async def refine_question(
     - "Change the numbers but keep the same concept"
     - "Add more context to the question stem"
     """
-    # Get question state
-    if request.question_id:
-        question = session.get(Question, request.question_id)
+    # Handle conversation continuity first (may provide question_state)
+    conversation_history = []
+    turn_number = 1
+    question_state = None
+    question_id = None
+
+    if body.conversation_id:
+        conv = _conversations.get(body.conversation_id)
+        if conv:
+            conversation_history = conv.get("history", [])
+            question_state = conv.get("current_state")
+            question_id = conv.get("question_id")
+            turn_number = len(conversation_history) // 2 + 1
+
+    # Get question state from request if not from conversation
+    if body.question_id:
+        question = session.get(Question, body.question_id)
         if not question:
             raise HTTPException(status_code=404, detail="Question not found")
 
@@ -230,36 +248,26 @@ async def refine_question(
             "options": question.options,
         }
         question_id = question.id
-    elif request.question_state:
-        question_state = request.question_state.model_dump()
+    elif body.question_state:
+        question_state = body.question_state.model_dump()
         question_id = None
-    else:
+    elif question_state is None:
+        # No question state from conversation, request, or question_id
         raise HTTPException(
             status_code=400,
             detail="Provide either question_id or question_state",
         )
 
-    # Handle conversation continuity
-    conversation_history = []
-    turn_number = 1
-
-    if request.conversation_id:
-        conv = _conversations.get(request.conversation_id)
-        if conv:
-            conversation_history = conv.get("history", [])
-            question_state = conv.get("current_state", question_state)
-            turn_number = len(conversation_history) // 2 + 1
-
     # Generate refinement
     generator = get_question_generator()
     result: RefinedQuestion = generator.refine_question(
         question_state=question_state,
-        instruction=request.instruction,
+        instruction=body.instruction,
         conversation_history=conversation_history if conversation_history else None,
     )
 
     # Create or update conversation
-    conversation_id = request.conversation_id or uuid.uuid4()
+    conversation_id = body.conversation_id or uuid.uuid4()
 
     new_state = {
         "question_text": result.question_text,
@@ -281,7 +289,7 @@ async def refine_question(
         }
 
     _conversations[conversation_id]["history"].extend([
-        {"role": "user", "content": request.instruction},
+        {"role": "user", "content": body.instruction},
         {"role": "assistant", "content": f"Changes: {result.changes_made}"},
     ])
     _conversations[conversation_id]["current_state"] = new_state
@@ -290,7 +298,7 @@ async def refine_question(
     if question_id and current_user:
         refinement = RefinementEntry(
             question_id=question_id,
-            instruction=request.instruction,
+            instruction=body.instruction,
             changes_made=result.changes_made,
             previous_state=question_state,
             new_state=new_state,
@@ -314,6 +322,7 @@ async def refine_question(
     # Build response question
     response_question = QuestionPublic(
         id=question_id or uuid.uuid4(),
+        created_at=datetime.utcnow(),
         question_text=result.question_text,
         question_type=QuestionType.MCQ if result.question_type == "mcq" else QuestionType.OPEN_ENDED,
         difficulty=result.difficulty,

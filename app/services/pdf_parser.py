@@ -2,7 +2,9 @@
 PDF Parser Service - Extract text from PDF documents.
 
 Supports multiple extraction methods for reliability.
+Also supports converting PDF pages to images for direct LLM processing.
 """
+import base64
 import io
 from pathlib import Path
 
@@ -85,23 +87,35 @@ def extract_text_from_pdf(pdf_content: bytes) -> str:
     Raises:
         PDFParserError: If all extraction methods fail
     """
+    errors = []
+
     # Try PyMuPDF first (better quality)
     try:
         text = extract_text_pymupdf(pdf_content)
         if text.strip():
             return text
-    except PDFParserError:
-        pass
+        errors.append("PyMuPDF: extracted but no text content (possibly scanned/image PDF)")
+    except PDFParserError as e:
+        errors.append(str(e))
 
     # Fallback to pypdf
     try:
         text = extract_text_pypdf(pdf_content)
         if text.strip():
             return text
-    except PDFParserError:
-        pass
+        errors.append("pypdf: extracted but no text content (possibly scanned/image PDF)")
+    except PDFParserError as e:
+        errors.append(str(e))
 
-    raise PDFParserError("Failed to extract text from PDF using all available methods")
+    # Check if it's likely a scanned PDF
+    error_detail = "; ".join(errors)
+    if "no text content" in error_detail:
+        raise PDFParserError(
+            "PDF appears to be scanned or image-based. Please use a PDF with selectable text, "
+            "or use the text input option instead."
+        )
+
+    raise PDFParserError(f"Failed to extract text: {error_detail}")
 
 
 def get_pdf_info(pdf_content: bytes) -> dict:
@@ -166,3 +180,59 @@ def chunk_text(text: str, max_chunk_size: int = 4000, overlap: int = 200) -> lis
         start = end - overlap
 
     return chunks
+
+
+def pdf_to_images(pdf_content: bytes, max_pages: int = 10, dpi: int = 150) -> list[dict]:
+    """
+    Convert PDF pages to base64-encoded images for direct LLM processing.
+
+    Args:
+        pdf_content: Raw PDF bytes
+        max_pages: Maximum number of pages to convert (to manage token limits)
+        dpi: Resolution for rendering (higher = better quality but larger size)
+
+    Returns:
+        List of dicts with 'page', 'base64', and 'mime_type' keys
+
+    Raises:
+        PDFParserError: If conversion fails
+    """
+    try:
+        doc = fitz.open(stream=pdf_content, filetype="pdf")
+        images = []
+
+        # Limit pages to prevent token overflow
+        num_pages = min(len(doc), max_pages)
+
+        for page_num in range(num_pages):
+            page = doc[page_num]
+
+            # Render page to image
+            # Matrix for scaling: 150 DPI = 150/72 = ~2.08x zoom
+            zoom = dpi / 72
+            mat = fitz.Matrix(zoom, zoom)
+            pix = page.get_pixmap(matrix=mat)
+
+            # Convert to PNG bytes
+            img_bytes = pix.tobytes("png")
+
+            # Encode to base64
+            img_base64 = base64.b64encode(img_bytes).decode("utf-8")
+
+            images.append({
+                "page": page_num + 1,
+                "base64": img_base64,
+                "mime_type": "image/png",
+            })
+
+        doc.close()
+
+        if not images:
+            raise PDFParserError("PDF has no pages")
+
+        return images
+
+    except Exception as e:
+        if isinstance(e, PDFParserError):
+            raise
+        raise PDFParserError(f"Failed to convert PDF to images: {e}")
