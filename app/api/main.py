@@ -6,6 +6,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth_router,
     generation_router,
+    questions_router,
     refinement_router,
     similarity_router,
 )
@@ -19,3 +20,6 @@ api_router.include_router(auth_router, prefix="/auth", tags=["Authentication"])
 api_router.include_router(generation_router, prefix="/generate", tags=["Question Generation"])
 api_router.include_router(similarity_router, prefix="/similar", tags=["Similarity Generation"])
 api_router.include_router(refinement_router, prefix="/refine", tags=["Interactive Refinement"])
+
+# Question Management
+api_router.include_router(questions_router, prefix="/questions", tags=["Question Management"])
