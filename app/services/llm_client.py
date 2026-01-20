@@ -131,6 +131,60 @@ class LLMClient:
         )
         return response.choices[0].message.content or ""
 
+    def generate_structured_with_images(
+        self,
+        response_model: type[BaseModel],
+        system_prompt: str,
+        user_prompt: str,
+        images: list[dict],
+        temperature: float | None = None,
+        max_retries: int = 3,
+    ) -> BaseModel:
+        """
+        Generate structured response from images (for PDF/image processing).
+
+        Args:
+            response_model: Pydantic model defining the expected output structure
+            system_prompt: System instructions for the LLM
+            user_prompt: User input/query
+            images: List of image dicts with 'base64' and 'mime_type' keys
+            temperature: Override default temperature
+            max_retries: Number of retries for validation failures
+
+        Returns:
+            Instance of response_model with validated data
+        """
+        # Build multimodal content array
+        content: list[dict] = []
+
+        # Add images first
+        for img in images:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:{img['mime_type']};base64,{img['base64']}"
+                }
+            })
+
+        # Add text prompt
+        content.append({
+            "type": "text",
+            "text": user_prompt
+        })
+
+        response = self.client.chat.completions.create(
+            model=self.model,
+            response_model=response_model,
+            max_retries=max_retries,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": content},
+            ],
+            temperature=temperature or self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        return response
+
 
 # Default client instance
 def get_llm_client(

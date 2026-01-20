@@ -20,7 +20,7 @@ from app.models import (
     QuestionType,
 )
 from app.schemas.questions import GeneratedQuestions
-from app.services.pdf_parser import PDFParserError, extract_text_from_pdf, get_pdf_info
+from app.services.pdf_parser import PDFParserError, extract_text_from_pdf, get_pdf_info, pdf_to_images
 from app.services.question_generator import get_question_generator
 
 router = APIRouter()
@@ -204,7 +204,8 @@ async def generate_from_pdf(
     """
     Generate questions from a PDF document.
 
-    - Extracts text from PDF using PyMuPDF (with pypdf fallback)
+    - First tries to extract text from PDF
+    - Falls back to multimodal (image-based) processing for scanned PDFs
     - Supports multi-page documents
     - Returns AI-generated questions with explanations
     """
@@ -215,22 +216,9 @@ async def generate_from_pdf(
             detail="File must be a PDF document",
         )
 
-    # Read and parse PDF
-    try:
-        pdf_content = await file.read()
-        text_content = extract_text_from_pdf(pdf_content)
-        pdf_info = get_pdf_info(pdf_content)
-    except PDFParserError as e:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Failed to parse PDF: {str(e)}",
-        )
-
-    if not text_content or len(text_content.strip()) < 50:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="PDF contains insufficient text content for question generation",
-        )
+    # Read PDF content
+    pdf_content = await file.read()
+    pdf_info = get_pdf_info(pdf_content)
 
     # Parse question types from form data
     q_types = None
@@ -240,20 +228,47 @@ async def generate_from_pdf(
             for t in question_types.split(",")
         ]
 
-    # Generate questions
     generator = get_question_generator()
-    result: GeneratedQuestions = generator.generate_from_document(
-        content=text_content,
-        num_questions=num_questions,
-        question_types=q_types,
-        difficulty=difficulty,
-        topic_focus=topic_focus,
-    )
+    use_image_mode = False
+
+    # Try text extraction first
+    try:
+        text_content = extract_text_from_pdf(pdf_content)
+        if text_content and len(text_content.strip()) >= 50:
+            # Generate questions from extracted text
+            result: GeneratedQuestions = generator.generate_from_document(
+                content=text_content,
+                num_questions=num_questions,
+                question_types=q_types,
+                difficulty=difficulty,
+                topic_focus=topic_focus,
+            )
+        else:
+            use_image_mode = True
+    except PDFParserError:
+        use_image_mode = True
+
+    # Fallback to image-based processing (multimodal)
+    if use_image_mode:
+        try:
+            images = pdf_to_images(pdf_content, max_pages=10)
+            result = generator.generate_from_images(
+                images=images,
+                num_questions=num_questions,
+                question_types=q_types,
+                difficulty=difficulty,
+                topic_focus=topic_focus,
+            )
+        except PDFParserError as e:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Failed to process PDF: {str(e)}",
+            )
 
     # Create session
     gen_session = GenerationSession(
         source_type=GenerationSource.PDF,
-        source_content=f"PDF: {file.filename}",
+        source_content=f"PDF: {file.filename}" + (" (image mode)" if use_image_mode else ""),
         num_questions_requested=num_questions,
         user_id=current_user.id if current_user else None,
     )
@@ -288,7 +303,7 @@ async def generate_from_pdf(
         session_id=gen_session.id,
         questions=[QuestionPublic.model_validate(q) for q in questions],
         generation_summary=result.generation_summary,
-        source_type="pdf",
+        source_type="pdf" + ("_image" if use_image_mode else ""),
         page_count=pdf_info.get("page_count"),
     )
 

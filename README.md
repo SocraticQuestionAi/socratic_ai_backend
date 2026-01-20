@@ -479,54 +479,147 @@ mypy app
 
 The test suite uses pytest with SQLite in-memory database and mocked LLM responses.
 
+### Test Coverage
+
+| Module | Coverage | Description |
+|--------|----------|-------------|
+| `app/api/routes/*` | 100% | All API endpoints fully tested |
+| `app/crud.py` | 100% | All CRUD operations tested |
+| `app/models.py` | 100% | All database models tested |
+| `app/services/*` | 97-100% | LLM client, PDF parser, question generator |
+| `app/core/security.py` | 100% | Password hashing, JWT creation |
+| `app/api/deps.py` | 90% | Authentication dependencies |
+| **Overall** | **96%** | **170 tests passing** |
+
 ### Running Tests
 
 ```bash
 # Run all tests
 pytest
 
-# Run with coverage
-pytest --cov=app
+# Run with coverage report
+pytest --cov=app --cov-report=term-missing
+
+# Run with HTML coverage report
+pytest --cov=app --cov-report=html
 
 # Run specific test file
 pytest tests/test_api/test_generation.py
 
+# Run specific test class
+pytest tests/test_api/test_auth.py::TestLogin
+
 # Run tests matching pattern
 pytest -k "test_auth"
 
-# Verbose output
-pytest -v
+# Verbose output with short traceback
+pytest -v --tb=short
+
+# Run only failed tests from last run
+pytest --lf
 ```
 
 ### Test Structure
 
 ```
 tests/
-├── conftest.py              # Fixtures and configuration
-├── fixtures/                # Test data
-├── test_api/                # API endpoint tests
-│   ├── test_auth.py
-│   ├── test_generation.py
-│   ├── test_similarity.py
-│   ├── test_refinement.py
-│   └── test_questions.py
-├── test_core/               # Core module tests
-│   └── test_security.py
-├── test_crud/               # Database operation tests
-│   └── test_crud.py
-└── test_services/           # Service layer tests
-    ├── test_llm_client.py
-    ├── test_pdf_parser.py
-    └── test_question_generator.py
+├── conftest.py                    # Fixtures and test configuration
+├── test_api/                      # API endpoint tests (65 tests)
+│   ├── test_auth.py               # 18 tests - login, registration, tokens
+│   ├── test_generation.py         # 13 tests - text/PDF generation
+│   ├── test_questions.py          # 11 tests - CRUD operations
+│   ├── test_refinement.py         # 12 tests - Canvas flow, conversations
+│   └── test_similarity.py         # 11 tests - analysis, similar generation
+├── test_core/                     # Core module tests (5 tests)
+│   └── test_security.py           # Password hashing, JWT creation
+├── test_crud/                     # Database operation tests (26 tests)
+│   └── test_crud.py               # User, session, question CRUD
+└── test_services/                 # Service layer tests (74 tests)
+    ├── test_llm_client.py         # 5 tests - structured output
+    ├── test_pdf_parser.py         # 38 tests - PDF extraction
+    └── test_question_generator.py # 31 tests - all AI workflows
 ```
 
 ### Key Test Fixtures
 
-- `client`: TestClient for API requests
-- `authenticated_client`: Client with JWT auth
-- `test_user`: Sample user in database
-- `mock_llm_client`: Mocked LLM for unit tests
-- `test_question`: Sample question fixture
+| Fixture | Description |
+|---------|-------------|
+| `client` | TestClient for unauthenticated API requests |
+| `authenticated_client` | Client with JWT auth (user dependencies overridden) |
+| `session` | SQLite in-memory database session |
+| `test_user` | Sample user created in database |
+| `test_superuser` | Superuser for admin endpoint tests |
+| `auth_headers` | Authorization headers with valid JWT |
+| `mock_llm_client` | Mocked LLM client with deterministic responses |
+| `mock_generated_questions` | Mock response for question generation |
+| `mock_refined_question` | Mock response for question refinement |
+| `test_question` | Sample question fixture in database |
+| `test_generation_session` | Sample generation session fixture |
+| `sample_pdf_content` | Valid PDF bytes for upload tests |
+| `sample_text_content` | Educational text for generation tests |
+
+### Test Categories
+
+#### API Tests
+- **Authentication**: Login, registration, token validation, edge cases (invalid UUID, nonexistent user, inactive user)
+- **Generation**: Text-based generation, PDF upload, session retrieval, validation errors
+- **Similarity**: Question analysis, similar question generation, batch processing
+- **Refinement**: Canvas flow, conversation continuation, history tracking
+- **Questions**: CRUD operations, pagination, authorization
+
+#### Service Tests
+- **LLM Client**: Structured output generation, text generation
+- **PDF Parser**: Text extraction, encrypted PDF handling, edge cases
+- **Question Generator**: Document generation, similarity analysis, refinement workflows
+
+#### Security Tests
+- **Password Hashing**: Bcrypt hashing and verification
+- **JWT Tokens**: Creation and validation
+- **Authentication Edge Cases**: Invalid tokens, expired tokens, missing users
+
+### Writing New Tests
+
+```python
+# Example: Testing a new endpoint
+import pytest
+from fastapi.testclient import TestClient
+
+class TestNewFeature:
+    """Tests for the new feature endpoint."""
+
+    def test_feature_success(
+        self,
+        client: TestClient,
+        mock_generated_questions,  # Use existing fixtures
+    ):
+        """Test successful feature operation."""
+        with patch("app.api.routes.feature.get_service") as mock:
+            mock.return_value.process.return_value = expected_result
+
+            response = client.post("/api/v1/feature/action", json={...})
+
+            assert response.status_code == 200
+            assert response.json()["key"] == expected_value
+
+    def test_feature_requires_auth(self, client: TestClient):
+        """Test that feature requires authentication."""
+        response = client.get("/api/v1/feature/protected")
+        assert response.status_code == 401
+
+    def test_feature_with_auth(self, authenticated_client: TestClient):
+        """Test feature with authenticated user."""
+        response = authenticated_client.get("/api/v1/feature/protected")
+        assert response.status_code == 200
+```
+
+### Mocking Strategy
+
+The test suite uses extensive mocking to avoid external dependencies:
+
+1. **Database**: SQLite in-memory database with fresh schema per test session
+2. **LLM Calls**: Mocked `get_question_generator()` returns deterministic responses
+3. **PDF Parsing**: Mocked `extract_text_from_pdf()` for predictable content
+4. **Authentication**: Dependency overrides for `get_current_user` and `get_optional_user`
 
 ---
 

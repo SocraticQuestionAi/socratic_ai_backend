@@ -157,6 +157,55 @@ Generate {num_questions} questions with complete explanations."""
 
         return result
 
+    def generate_from_images(
+        self,
+        images: list[dict],
+        num_questions: int = 5,
+        question_types: list[QuestionType] | None = None,
+        difficulty: str = "mixed",
+        topic_focus: str | None = None,
+    ) -> GeneratedQuestions:
+        """
+        Generate questions directly from PDF page images (multimodal).
+
+        This method sends images directly to the LLM for processing,
+        which is useful for scanned PDFs or image-based documents.
+
+        Args:
+            images: List of image dicts with 'base64' and 'mime_type' keys
+            num_questions: Number of questions to generate
+            question_types: List of question types to generate
+            difficulty: "easy", "medium", "hard", or "mixed"
+            topic_focus: Optional specific topic to focus on
+
+        Returns:
+            GeneratedQuestions with list of questions and summary
+        """
+        if question_types is None:
+            question_types = [QuestionType.MCQ, QuestionType.OPEN_ENDED]
+
+        type_instruction = self._build_type_instruction(question_types)
+        difficulty_instruction = self._build_difficulty_instruction(difficulty, num_questions)
+        topic_instruction = f"\nFocus specifically on: {topic_focus}" if topic_focus else ""
+
+        user_prompt = f"""Analyze the provided document images and generate {num_questions} high-quality educational questions based on the content you see.
+
+{type_instruction}
+{difficulty_instruction}
+{topic_instruction}
+
+Read and understand all the content in the images, then generate {num_questions} questions with complete explanations."""
+
+        result = self.llm.generate_structured_with_images(
+            response_model=GeneratedQuestions,
+            system_prompt=DOCUMENT_GENERATION_SYSTEM_PROMPT,
+            user_prompt=user_prompt,
+            images=images,
+            temperature=0.7,
+        )
+
+        return result
+
     def analyze_question(self, question_text: str, options: list[dict] | None = None) -> SimilarityAnalysis:
         """
         Analyze a question for similarity generation.
