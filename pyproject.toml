@@ -1,0 +1,100 @@
+[project]
+name = "socratic-ai-backend"
+version = "0.1.0"
+description = "AI-powered question generation backend with PDF parsing, similarity generation, and interactive refinement"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    # FastAPI & Web
+    "fastapi[standard]>=0.115.0",
+    "python-multipart>=0.0.9",
+    "uvicorn[standard]>=0.30.0",
+
+    # Database
+    "sqlmodel>=0.0.22",
+    "psycopg[binary]>=3.2.0",
+    "alembic>=1.13.0",
+
+    # Auth & Security
+    "passlib[bcrypt]>=1.7.4",
+    "bcrypt==4.3.0",
+    "pyjwt>=2.9.0",
+
+    # Validation & Settings
+    "pydantic>=2.9.0",
+    "pydantic-settings>=2.5.0",
+    "email-validator>=2.2.0",
+
+    # AI & LLM
+    "langchain>=0.3.0",
+    "langchain-core>=0.3.0",
+    "langchain-openai>=0.2.0",
+    "langchain-google-genai>=2.0.0",
+    "openai>=1.50.0",
+    "google-generativeai>=0.8.0",
+    "instructor>=1.4.0",
+
+    # PDF Processing
+    "pypdf>=4.3.0",
+    "pymupdf>=1.24.0",
+
+    # Image Processing (for multimodal)
+    "pillow>=10.4.0",
+
+    # Utilities
+    "httpx>=0.27.0",
+    "tenacity>=9.0.0",
+    "python-dotenv>=1.0.1",
+
+    # Monitoring
+    "sentry-sdk[fastapi]>=2.14.0",
+]
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "mypy>=1.11.0",
+    "ruff>=0.6.0",
+    "httpx>=0.27.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.mypy]
+strict = true
+exclude = ["venv", ".venv", "alembic"]
+
+[tool.ruff]
+target-version = "py311"
+exclude = ["alembic"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "C4",     # flake8-comprehensions
+    "UP",     # pyupgrade
+    "ARG001", # unused arguments
+    "T201",   # print statements
+]
+ignore = [
+    "E501",   # line too long
+    "B008",   # function calls in argument defaults
+    "B904",   # raise without from
+]
+
+[tool.ruff.lint.pyupgrade]
+keep-runtime-typing = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.coverage.run]
+source = ["app"]
