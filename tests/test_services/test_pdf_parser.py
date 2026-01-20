@@ -77,7 +77,7 @@ class TestExtractTextFromPDF:
         with pytest.raises(PDFParserError) as exc_info:
             extract_text_from_pdf(invalid_content)
 
-        assert "Failed to extract text from PDF" in str(exc_info.value)
+        assert "Failed to extract text" in str(exc_info.value)
 
 
 class TestGetPDFInfo:

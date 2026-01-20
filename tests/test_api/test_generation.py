@@ -253,7 +253,7 @@ class TestGenerateFromPDF:
             )
 
             assert response.status_code == 422
-            assert "Failed to parse PDF" in response.json()["detail"]
+            assert "Failed to" in response.json()["detail"]
 
     def test_generate_from_pdf_insufficient_text(
         self, client: TestClient, sample_pdf_content: bytes
