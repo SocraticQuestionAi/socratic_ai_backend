@@ -237,11 +237,17 @@ class TestGenerateFromPDF:
         self, client: TestClient
     ):
         """Test that invalid PDF content is handled."""
+        from app.services.pdf_parser import PDFParserError
+
         with patch(
             "app.api.routes.generation.extract_text_from_pdf"
-        ) as mock_extract:
-            from app.services.pdf_parser import PDFParserError
+        ) as mock_extract, patch(
+            "app.api.routes.generation.pdf_to_images"
+        ) as mock_to_images:
+            # Text extraction fails, triggering image mode fallback
             mock_extract.side_effect = PDFParserError("Cannot parse PDF")
+            # Image mode also fails
+            mock_to_images.side_effect = PDFParserError("Cannot convert to images")
 
             files = {"file": ("bad.pdf", io.BytesIO(b"Invalid PDF content"), "application/pdf")}
             data = {"num_questions": 3}
@@ -258,11 +264,18 @@ class TestGenerateFromPDF:
     def test_generate_from_pdf_insufficient_text(
         self, client: TestClient, sample_pdf_content: bytes
     ):
-        """Test PDF with too little extractable text."""
+        """Test PDF with too little extractable text falls back to image mode."""
+        from app.services.pdf_parser import PDFParserError
+
         with patch(
             "app.api.routes.generation.extract_text_from_pdf"
-        ) as mock_extract:
+        ) as mock_extract, patch(
+            "app.api.routes.generation.pdf_to_images"
+        ) as mock_to_images:
+            # Text extraction returns insufficient content
             mock_extract.return_value = "Too short"  # Less than 50 chars
+            # Image mode fallback also fails
+            mock_to_images.side_effect = PDFParserError("PDF has insufficient content")
 
             files = {"file": ("test.pdf", io.BytesIO(sample_pdf_content), "application/pdf")}
             data = {"num_questions": 3}
@@ -274,7 +287,7 @@ class TestGenerateFromPDF:
             )
 
             assert response.status_code == 422
-            assert "insufficient text" in response.json()["detail"].lower()
+            assert "Failed to process PDF" in response.json()["detail"]
 
 
 class TestGetGenerationSession:
