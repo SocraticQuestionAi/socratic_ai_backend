@@ -20,6 +20,7 @@ from app.models import (
     QuestionType,
 )
 from app.schemas.questions import GeneratedQuestions
+from app.services.llm_client import LLMClientError
 from app.services.pdf_parser import PDFParserError, extract_text_from_pdf, get_pdf_info, pdf_to_images
 from app.services.question_generator import get_question_generator
 
@@ -127,7 +128,13 @@ async def generate_from_text(
     - Returns AI-generated questions with explanations
     - Optionally saves to database if user is authenticated
     """
-    generator = get_question_generator()
+    try:
+        generator = get_question_generator()
+    except LLMClientError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
 
     # Parse question types
     q_types = None
@@ -138,13 +145,19 @@ async def generate_from_text(
         ]
 
     # Generate questions
-    result: GeneratedQuestions = generator.generate_from_document(
-        content=body.content,
-        num_questions=body.num_questions,
-        question_types=q_types,
-        difficulty=body.difficulty,
-        topic_focus=body.topic_focus,
-    )
+    try:
+        result: GeneratedQuestions = generator.generate_from_document(
+            content=body.content,
+            num_questions=body.num_questions,
+            question_types=q_types,
+            difficulty=body.difficulty,
+            topic_focus=body.topic_focus,
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail=f"LLM request failed: {str(e)}",
+        )
 
     # Create session and questions in database
     gen_session = GenerationSession(
@@ -228,7 +241,14 @@ async def generate_from_pdf(
             for t in question_types.split(",")
         ]
 
-    generator = get_question_generator()
+    try:
+        generator = get_question_generator()
+    except LLMClientError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+
     use_image_mode = False
 
     # Try text extraction first
@@ -236,13 +256,19 @@ async def generate_from_pdf(
         text_content = extract_text_from_pdf(pdf_content)
         if text_content and len(text_content.strip()) >= 50:
             # Generate questions from extracted text
-            result: GeneratedQuestions = generator.generate_from_document(
-                content=text_content,
-                num_questions=num_questions,
-                question_types=q_types,
-                difficulty=difficulty,
-                topic_focus=topic_focus,
-            )
+            try:
+                result: GeneratedQuestions = generator.generate_from_document(
+                    content=text_content,
+                    num_questions=num_questions,
+                    question_types=q_types,
+                    difficulty=difficulty,
+                    topic_focus=topic_focus,
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"LLM request failed: {str(e)}",
+                )
         else:
             use_image_mode = True
     except PDFParserError:
@@ -252,13 +278,19 @@ async def generate_from_pdf(
     if use_image_mode:
         try:
             images = pdf_to_images(pdf_content, max_pages=10)
-            result = generator.generate_from_images(
-                images=images,
-                num_questions=num_questions,
-                question_types=q_types,
-                difficulty=difficulty,
-                topic_focus=topic_focus,
-            )
+            try:
+                result = generator.generate_from_images(
+                    images=images,
+                    num_questions=num_questions,
+                    question_types=q_types,
+                    difficulty=difficulty,
+                    topic_focus=topic_focus,
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                    detail=f"LLM request failed: {str(e)}",
+                )
         except PDFParserError as e:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

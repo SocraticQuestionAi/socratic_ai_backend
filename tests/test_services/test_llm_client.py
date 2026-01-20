@@ -202,6 +202,59 @@ class TestGenerateText:
         assert result == ""
 
 
+class TestInstructorModeSelection:
+    """Tests for instructor mode selection based on model."""
+
+    @patch("app.services.llm_client.OpenAI")
+    @patch("app.services.llm_client.instructor.from_openai")
+    def test_gemini_model_uses_json_mode(self, mock_from_openai, mock_openai):
+        """Test that Gemini models use JSON mode instead of TOOLS."""
+        import instructor
+        mock_openai.return_value = MagicMock()
+
+        client = LLMClient(model="google/gemini-3-pro-preview")
+
+        mock_from_openai.assert_called_once()
+        call_kwargs = mock_from_openai.call_args.kwargs
+        assert call_kwargs["mode"] == instructor.Mode.JSON
+
+    @patch("app.services.llm_client.OpenAI")
+    @patch("app.services.llm_client.instructor.from_openai")
+    def test_gemini_flash_uses_json_mode(self, mock_from_openai, mock_openai):
+        """Test that Gemini Flash models also use JSON mode."""
+        import instructor
+        mock_openai.return_value = MagicMock()
+
+        client = LLMClient(model="google/gemini-2.0-flash-001")
+
+        call_kwargs = mock_from_openai.call_args.kwargs
+        assert call_kwargs["mode"] == instructor.Mode.JSON
+
+    @patch("app.services.llm_client.OpenAI")
+    @patch("app.services.llm_client.instructor.from_openai")
+    def test_claude_model_uses_tools_mode(self, mock_from_openai, mock_openai):
+        """Test that Claude models use TOOLS mode (default)."""
+        import instructor
+        mock_openai.return_value = MagicMock()
+
+        client = LLMClient(model="anthropic/claude-3.5-sonnet")
+
+        call_kwargs = mock_from_openai.call_args.kwargs
+        assert call_kwargs["mode"] == instructor.Mode.TOOLS
+
+    @patch("app.services.llm_client.OpenAI")
+    @patch("app.services.llm_client.instructor.from_openai")
+    def test_gpt_model_uses_tools_mode(self, mock_from_openai, mock_openai):
+        """Test that GPT models use TOOLS mode (default)."""
+        import instructor
+        mock_openai.return_value = MagicMock()
+
+        client = LLMClient(model="openai/gpt-4o")
+
+        call_kwargs = mock_from_openai.call_args.kwargs
+        assert call_kwargs["mode"] == instructor.Mode.TOOLS
+
+
 class TestGetLLMClient:
     """Tests for the factory function."""
 

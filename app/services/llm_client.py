@@ -3,11 +3,18 @@ LLM Client - Unified interface for OpenRouter and Gemini.
 
 Supports structured outputs via instructor library for JSON Schema enforcement.
 """
+import httpx
 import instructor
 from openai import OpenAI
 from pydantic import BaseModel
 
 from app.core.config import settings
+
+
+class LLMClientError(Exception):
+    """Exception raised for LLM client errors."""
+
+    pass
 
 
 class LLMClient:
@@ -22,19 +29,40 @@ class LLMClient:
         model: str | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        timeout: int | None = None,
     ):
         self.model = model or settings.DEFAULT_MODEL
         self.temperature = temperature or settings.DEFAULT_TEMPERATURE
         self.max_tokens = max_tokens or settings.DEFAULT_MAX_TOKENS
+        self.timeout = timeout or settings.LLM_TIMEOUT_SECONDS
 
-        # Initialize OpenRouter client (OpenAI-compatible)
+        # Validate API key
+        if not settings.OPENROUTER_API_KEY:
+            raise LLMClientError(
+                "OPENROUTER_API_KEY is not configured. "
+                "Please set it in your .env file."
+            )
+
+        # Initialize OpenRouter client with timeout
         self._openrouter_client = OpenAI(
             api_key=settings.OPENROUTER_API_KEY,
             base_url=settings.OPENROUTER_BASE_URL,
+            timeout=httpx.Timeout(self.timeout, connect=10.0),
         )
 
-        # Wrap with instructor for structured outputs
-        self.client = instructor.from_openai(self._openrouter_client)
+        # Choose instructor mode based on model
+        # Gemini models work better with JSON mode instead of TOOLS mode
+        instructor_mode = self._get_instructor_mode()
+        self.client = instructor.from_openai(self._openrouter_client, mode=instructor_mode)
+
+    def _get_instructor_mode(self) -> instructor.Mode:
+        """Determine the best instructor mode for the current model."""
+        model_lower = self.model.lower()
+        # Gemini models don't handle nested tool schemas well - use JSON mode
+        if "gemini" in model_lower or "google" in model_lower:
+            return instructor.Mode.JSON
+        # Claude and GPT models work well with TOOLS mode (default)
+        return instructor.Mode.TOOLS
 
     def generate_structured(
         self,

@@ -80,9 +80,10 @@ class Settings(BaseSettings):
     GOOGLE_API_KEY: str = ""
 
     # Model Configuration
-    DEFAULT_MODEL: str = "google/gemini-2.0-flash-exp:free"
+    DEFAULT_MODEL: str = "google/gemini-3-pro-preview"
     DEFAULT_TEMPERATURE: float = 0.7
-    DEFAULT_MAX_TOKENS: int = 4096
+    DEFAULT_MAX_TOKENS: int = 16384  # Increased for reasoning models (Gemini uses ~10k tokens for thinking)
+    LLM_TIMEOUT_SECONDS: int = 300  # Timeout for LLM API calls (5 min for reasoning models)
 
     # First Superuser
     FIRST_SUPERUSER: str = "admin@example.com"
