@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: .
+      context: /home/cihat-socratic/htdocs/backend
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -26,7 +26,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - /home/cihat-socratic/htdocs/backend/data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
