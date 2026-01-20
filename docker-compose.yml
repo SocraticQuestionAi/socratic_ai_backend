@@ -1,7 +1,7 @@
 services:
   api:
     build:
-      context: /home/cihat-socratic/htdocs/backend
+      context: .
       dockerfile: Dockerfile
     ports:
       - "8000:8000"
@@ -13,9 +13,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    volumes:
-      - ./app:/app/app # Hot reload for development
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
   db:
     image: postgres:16-alpine
@@ -26,7 +23,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - /home/cihat-socratic/htdocs/backend/data/postgres:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
